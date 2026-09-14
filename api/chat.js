@@ -6,17 +6,18 @@ const openai = new OpenAI({
   baseURL: "https://gen.ai.kku.ac.th/iccsacth/api/v1",
 });
 
-// เชื่อมต่อ Supabase
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY,
-);
+// ตรวจสอบความพร้อมของค่า Supabase ก่อนเรียกใช้งาน
+const hasSupabaseConfig =
+  process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY;
+const supabase = hasSupabaseConfig
+  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+  : null;
 
 const SYSTEM_PROMPT = `
 คุณคือ 'MindMate' เพื่อนรับฟังและประเมินภาวะสุขภาพจิตเบื้องต้น
 หน้าที่ของคุณ:
 1. ให้คำปรึกษาด้วยน้ำเสียงอบอุ่น เข้าอกเข้าใจ ไม่ตัดสิน ไม่สั่งสอน
-2. หากพบสัญญาณอาการแพนิค: ใช้ประโยคสั้น ยืนยันว่าปลอดภัย และพาหายใจช้าๆ ทันที
+2. หากพบสัญญาณอาการแพนิค (ใจสั่น แน่นหน้าอก หายใจไม่อิ่ม รู้สึกจะตาย): ใช้ประโยคสั้น ยืนยันว่าปลอดภัย และพาหายใจช้าๆ ทันที
 3. สังเกตและประเมินภาวะอารมณ์ส่งกลับมาในรูปแบบ JSON ตามโครงสร้างนี้เสมอ:
 {
   "reply": "ข้อความตอบกลับผู้ใช้",
@@ -41,6 +42,7 @@ export default async function handler(req, res) {
       ...(messages || []),
     ];
 
+    // 1. เรียกใช้งาน AI ให้ตอบกลับก่อนเป็นลำดับแรก
     const completion = await openai.chat.completions.create({
       model: "gemini-3.8-flash",
       messages: apiMessages,
@@ -58,39 +60,45 @@ export default async function handler(req, res) {
       try {
         parsedData = JSON.parse(jsonMatch[0]);
       } catch (e) {
-        console.warn("Parse Error");
+        console.warn("JSON Parse Error, using raw response");
       }
     }
 
-    // บันทึกข้อความผู้ใช้ลงฐานข้อมูล
-    await supabase.from("chat_history").insert([
-      {
-        session_id: sessionId,
-        sender_role: "user",
-        message_content: userMessage,
-      },
-    ]);
+    // 2. แยกการบันทึก Supabase ออกมาต่างหากเพื่อไม่ให้กระทบการตอบแชท
+    if (supabase) {
+      try {
+        await supabase.from("chat_history").insert([
+          {
+            session_id: sessionId || "anonymous",
+            sender_role: "user",
+            message_content: userMessage || "",
+          },
+          {
+            session_id: sessionId || "anonymous",
+            sender_role: "assistant",
+            message_content: parsedData.reply || rawContent,
+            primary_condition:
+              parsedData.assessment?.primaryCondition || "Normal",
+            severity: parsedData.assessment?.severity || "Normal",
+            requires_emergency:
+              parsedData.assessment?.requiresEmergency || false,
+          },
+        ]);
+      } catch (dbError) {
+        console.error("Supabase Save Error (Bypassed):", dbError);
+      }
+    } else {
+      console.warn("Supabase credentials missing in Environment Variables");
+    }
 
-    // บันทึกคำตอบ AI และผลประเมินลงฐานข้อมูล
-    await supabase.from("chat_history").insert([
-      {
-        session_id: sessionId,
-        sender_role: "assistant",
-        message_content: parsedData.reply || rawContent,
-        primary_condition: parsedData.assessment?.primaryCondition || "Unknown",
-        severity: parsedData.assessment?.severity || "Unknown",
-        requires_emergency: parsedData.assessment?.requiresEmergency || false,
-      },
-    ]);
-
+    // 3. ส่งคำตอบกลับหาหน้าเว็บเสมอ
     return res.status(200).json(parsedData);
   } catch (error) {
-    console.error("API Error:", error);
-    return res
-      .status(500)
-      .json({
-        reply: "ขออภัยครับ สัญญาณขัดข้องเล็กน้อย ลองใหม่อีกครั้งนะ",
-        assessment: null,
-      });
+    console.error("Core AI Error:", error);
+    return res.status(500).json({
+      reply:
+        "ขออภัยครับ เหมือนสัญญาณการเชื่อมต่อจะมีปัญหาเล็กน้อย ลองพิมพ์คุยกับเราอีกครั้งนะ",
+      assessment: null,
+    });
   }
 }
