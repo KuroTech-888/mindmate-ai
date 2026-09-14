@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MindMate - Admin Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  </head>
+  <body class="bg-slate-100 p-6">
+    <div class="max-w-7xl mx-auto space-y-6">
+      <!-- Header -->
+      <div
+        class="flex justify-between items-center bg-white p-6 rounded-xl shadow-sm border border-slate-200"
+      >
+        <h1 class="text-2xl font-bold text-slate-800">
+          📊 ระบบจัดการข้อมูล MindMate
+        </h1>
+        <button
+          class="bg-slate-800 text-white px-4 py-2 rounded-lg hover:bg-slate-700"
+        >
+          รีเฟรชข้อมูล
+        </button>
+      </div>
+
+      <!-- Metric Cards -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div
+          class="bg-white p-6 rounded-xl shadow-sm border-l-4 border-sky-500"
+        >
+          <p class="text-sm text-slate-500 font-medium">
+            ผู้ใช้งานทั้งหมด (วันนี้)
+          </p>
+          <p class="text-3xl font-bold text-slate-800 mt-2">128</p>
+        </div>
+        <div
+          class="bg-white p-6 rounded-xl shadow-sm border-l-4 border-amber-500"
+        >
+          <p class="text-sm text-slate-500 font-medium">
+            พบภาวะซึมเศร้า / แพนิค
+          </p>
+          <p class="text-3xl font-bold text-slate-800 mt-2">34</p>
+        </div>
+        <div
+          class="bg-rose-50 p-6 rounded-xl shadow-sm border-l-4 border-rose-600 animate-pulse"
+        >
+          <p class="text-sm text-rose-600 font-medium">
+            เคสฉุกเฉิน (Severe / 1323)
+          </p>
+          <p class="text-3xl font-bold text-rose-700 mt-2">3</p>
+        </div>
+      </div>
+
+      <!-- Comprehensive Overview Chart -->
+      <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+        <h2 class="text-lg font-bold text-slate-800 mb-4">
+          ภาพรวมระดับความรุนแรงของอารมณ์ทั้งหมด (Comprehensive Overview)
+        </h2>
+        <div
+          class="h-64 w-full flex items-center justify-center bg-slate-50 rounded-lg border border-slate-100"
+        >
+          <canvas id="overviewChart"></canvas>
+        </div>
+      </div>
+
+      <!-- All-Inclusive Drill-Down Data Table -->
+      <div
+        class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden"
+      >
+        <div class="p-6 border-b border-slate-200">
+          <h2 class="text-lg font-bold text-slate-800">
+            ประวัติการสนทนาและการประเมิน (ข้อมูลทั้งหมด)
+          </h2>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-sm">
+            <thead class="bg-slate-50 text-slate-600">
+              <tr>
+                <th class="px-6 py-4 font-medium">Session ID</th>
+                <th class="px-6 py-4 font-medium">ข้อความล่าสุดจากผู้ใช้</th>
+                <th class="px-6 py-4 font-medium">ประเภทอาการ</th>
+                <th class="px-6 py-4 font-medium">ระดับ (Severity)</th>
+                <th class="px-6 py-4 font-medium">สถานะ</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-200">
+              <tr class="hover:bg-slate-50">
+                <td class="px-6 py-4 font-mono text-xs">session_x8y9z</td>
+                <td class="px-6 py-4 text-slate-700 truncate max-w-xs">
+                  หายใจไม่อิ่ม เหมือนจะตาย...
+                </td>
+                <td class="px-6 py-4">
+                  <span
+                    class="bg-purple-100 text-purple-700 px-2 py-1 rounded text-xs font-medium"
+                    >Panic/Anxiety</span
+                  >
+                </td>
+                <td class="px-6 py-4">
+                  <span class="text-rose-600 font-bold">Severe</span>
+                </td>
+                <td class="px-6 py-4">
+                  <button class="text-sky-600 hover:underline">
+                    ดูประวัติแชท
+                  </button>
+                </td>
+              </tr>
+              <tr class="hover:bg-slate-50">
+                <td class="px-6 py-4 font-mono text-xs">session_a1b2c</td>
+                <td class="px-6 py-4 text-slate-700 truncate max-w-xs">
+                  รู้สึกแย่จัง วันนี้ทำงานผิดพลาด
+                </td>
+                <td class="px-6 py-4">
+                  <span
+                    class="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-medium"
+                    >Normal Stress</span
+                  >
+                </td>
+                <td class="px-6 py-4">
+                  <span class="text-emerald-600 font-bold">Mild</span>
+                </td>
+                <td class="px-6 py-4">
+                  <button class="text-sky-600 hover:underline">
+                    ดูประวัติแชท
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // Mockup Chart Initialization
+      const ctx = document.getElementById("overviewChart").getContext("2d");
+      new Chart(ctx, {
+        type: "bar",
+        data: {
+          labels: ["Normal", "Mild", "Moderate", "Severe"],
+          datasets: [
+            {
+              label: "ปริมาณผู้ใช้แยกตามระดับอาการ",
+              data: [65, 28, 12, 3],
+              backgroundColor: ["#38bdf8", "#34d399", "#fbbf24", "#f43f5e"],
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+        },
+      });
+    </script>
+  </body>
+</html>

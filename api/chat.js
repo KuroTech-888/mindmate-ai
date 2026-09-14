@@ -1,62 +1,96 @@
-import OpenAI from 'openai';
+import OpenAI from "openai";
+import { createClient } from "@supabase/supabase-js";
 
 const openai = new OpenAI({
-    apiKey: process.env.ICCS_API_KEY,
-    baseURL: "https://gen.ai.kku.ac.th/iccsacth/api/v1"
+  apiKey: process.env.ICCS_API_KEY,
+  baseURL: "https://gen.ai.kku.ac.th/iccsacth/api/v1",
 });
+
+// เชื่อมต่อ Supabase
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_ANON_KEY,
+);
 
 const SYSTEM_PROMPT = `
 คุณคือ 'MindMate' เพื่อนรับฟังและประเมินภาวะสุขภาพจิตเบื้องต้น
-บทบาทของคุณ:
-1. ให้คำปรึกษาด้วยน้ำเสียงอ่อนโยน อบอุ่น ไม่ตัดสิน ไม่สั่งสอน
-2. หากพบสัญญาณตื่นตระหนก/แพนิค (ใจสั่น แน่นหน้าอก กลัว ควบคุมตนเองไม่ได้): ใช้ประโยคสั้น ให้ความมั่นใจว่าปลอดภัย และแนะนำเทคนิคคุมลมหายใจ 4-7-8 ทันที
-3. สังเกตพฤติกรรมและวิเคราะห์ภาวะอารมณ์จากบทสนทนาอย่างต่อเนื่อง
-
-ข้อกำหนดเอาต์พุต:
-ตอบกลับเป็นรูปแบบ JSON Object เท่านั้น โดยมีโครงสร้างดังนี้:
+หน้าที่ของคุณ:
+1. ให้คำปรึกษาด้วยน้ำเสียงอบอุ่น เข้าอกเข้าใจ ไม่ตัดสิน ไม่สั่งสอน
+2. หากพบสัญญาณอาการแพนิค: ใช้ประโยคสั้น ยืนยันว่าปลอดภัย และพาหายใจช้าๆ ทันที
+3. สังเกตและประเมินภาวะอารมณ์ส่งกลับมาในรูปแบบ JSON ตามโครงสร้างนี้เสมอ:
 {
-  "reply": "ข้อความตอบกลับผู้ใช้ด้วยความเข้าอกเข้าใจ",
+  "reply": "ข้อความตอบกลับผู้ใช้",
   "assessment": {
-    "primaryCondition": "Depression" | "Panic/Anxiety" | "Normal Stress" | "Normal",
-    "severity": "Normal" | "Mild" | "Moderate" | "Severe",
-    "indicators": ["สรุปอาการสำคัญสั้นๆ 1-3 ข้อ เช่น นอนไม่หลับ, หายใจติดขัด"],
-    "requiresEmergency": true/false
+    "primaryCondition": "Depression" หรือ "Panic/Anxiety" หรือ "Normal Stress" หรือ "Normal",
+    "severity": "Normal" หรือ "Mild" หรือ "Moderate" หรือ "Severe",
+    "indicators": ["อาการสำคัญสั้นๆ 1-2 ข้อ"],
+    "requiresEmergency": false
   }
 }
+ตอบกลับเฉพาะรูปแบบ JSON ด้านบนเท่านั้น
 `;
 
 export default async function handler(req, res) {
-    if (req.method !== 'POST') {
-        return res.status(405).json({ error: 'Method Not Allowed' });
+  if (req.method !== "POST")
+    return res.status(405).json({ error: "Method Not Allowed" });
+
+  try {
+    const { messages, sessionId, userMessage } = req.body;
+    const apiMessages = [
+      { role: "system", content: SYSTEM_PROMPT },
+      ...(messages || []),
+    ];
+
+    const completion = await openai.chat.completions.create({
+      model: "gemini-3.8-flash",
+      messages: apiMessages,
+      temperature: 0.5,
+    });
+
+    const rawContent = completion.choices[0]?.message?.content || "";
+    const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
+
+    let parsedData = {
+      reply: rawContent.replace(/```json|```/g, "").trim(),
+      assessment: null,
+    };
+    if (jsonMatch) {
+      try {
+        parsedData = JSON.parse(jsonMatch[0]);
+      } catch (e) {
+        console.warn("Parse Error");
+      }
     }
 
-    try {
-        const userMessages = req.body.messages || [];
-        const messages = [
-            { role: 'system', content: SYSTEM_PROMPT },
-            ...userMessages
-        ];
+    // บันทึกข้อความผู้ใช้ลงฐานข้อมูล
+    await supabase.from("chat_history").insert([
+      {
+        session_id: sessionId,
+        sender_role: "user",
+        message_content: userMessage,
+      },
+    ]);
 
-        const completion = await openai.chat.completions.create({
-            model: 'gemini-3.8-flash',
-            messages: messages,
-            temperature: 0.6,
-            response_format: { type: "json_object" }
-        });
+    // บันทึกคำตอบ AI และผลประเมินลงฐานข้อมูล
+    await supabase.from("chat_history").insert([
+      {
+        session_id: sessionId,
+        sender_role: "assistant",
+        message_content: parsedData.reply || rawContent,
+        primary_condition: parsedData.assessment?.primaryCondition || "Unknown",
+        severity: parsedData.assessment?.severity || "Unknown",
+        requires_emergency: parsedData.assessment?.requiresEmergency || false,
+      },
+    ]);
 
-        const rawContent = completion.choices[0].message.content;
-        const parsedData = JSON.parse(rawContent);
-
-        return res.status(200).json({
-            reply: parsedData.reply,
-            assessment: parsedData.assessment
-        });
-
-    } catch (error) {
-        console.error('Error with AI API:', error);
-        return res.status(500).json({ 
-            reply: 'ขออภัยครับ เหมือนสัญญาณการเชื่อมต่อจะมีปัญหาเล็กน้อย ลองพิมพ์คุยกับเราอีกครั้งนะ',
-            assessment: null 
-        });
-    }
+    return res.status(200).json(parsedData);
+  } catch (error) {
+    console.error("API Error:", error);
+    return res
+      .status(500)
+      .json({
+        reply: "ขออภัยครับ สัญญาณขัดข้องเล็กน้อย ลองใหม่อีกครั้งนะ",
+        assessment: null,
+      });
+  }
 }
