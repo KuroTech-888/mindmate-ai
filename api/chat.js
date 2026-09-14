@@ -1,30 +1,34 @@
-const { OpenAI } = require('openai');
+import OpenAI from 'openai';
+
+const openai = new OpenAI({
+    apiKey: process.env.ICCS_API_KEY,
+    baseURL: "https://gen.ai.kku.ac.th/iccsacth/api/v1"
+});
+
+const SYSTEM_PROMPT = `
+คุณคือ 'MindMate' เพื่อนรับฟังและประเมินภาวะสุขภาพจิตเบื้องต้น
+บทบาทของคุณ:
+1. ให้คำปรึกษาด้วยน้ำเสียงอ่อนโยน อบอุ่น ไม่ตัดสิน ไม่สั่งสอน
+2. หากพบสัญญาณตื่นตระหนก/แพนิค (ใจสั่น แน่นหน้าอก กลัว ควบคุมตนเองไม่ได้): ใช้ประโยคสั้น ให้ความมั่นใจว่าปลอดภัย และแนะนำเทคนิคคุมลมหายใจ 4-7-8 ทันที
+3. สังเกตพฤติกรรมและวิเคราะห์ภาวะอารมณ์จากบทสนทนาอย่างต่อเนื่อง
+
+ข้อกำหนดเอาต์พุต:
+ตอบกลับเป็นรูปแบบ JSON Object เท่านั้น โดยมีโครงสร้างดังนี้:
+{
+  "reply": "ข้อความตอบกลับผู้ใช้ด้วยความเข้าอกเข้าใจ",
+  "assessment": {
+    "primaryCondition": "Depression" | "Panic/Anxiety" | "Normal Stress" | "Normal",
+    "severity": "Normal" | "Mild" | "Moderate" | "Severe",
+    "indicators": ["สรุปอาการสำคัญสั้นๆ 1-3 ข้อ เช่น นอนไม่หลับ, หายใจติดขัด"],
+    "requiresEmergency": true/false
+  }
+}
+`;
 
 export default async function handler(req, res) {
-    // รับเฉพาะ request แบบ POST เท่านั้น
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method Not Allowed' });
     }
-
-    // ดึงคีย์จากระบบของ Vercel (ซ่อนคีย์ได้อย่างปลอดภัย)
-    const apiKey = process.env.ICCS_API_KEY;
-    if (!apiKey) {
-        return res.status(500).json({ error: 'Server configuration error: Missing API Key' });
-    }
-
-    const openai = new OpenAI({
-        apiKey: apiKey,
-        baseURL: 'https://gen.ai.kku.ac.th/iccsacth/api/v1' 
-    });
-
-    const SYSTEM_PROMPT = `
-คุณคือ 'MindMate' แชทบอทเพื่อนรับฟังและให้กำลังใจเชิงจิตวิทยาเบื้องต้น
-หน้าที่ของคุณ:
-1. รับฟังอย่างเข้าอกเข้าใจ (Empathy) ไม่ตัดสิน และใช้น้ำเสียงที่อบอุ่น เป็นกันเอง
-2. วิเคราะห์แนวโน้มอารมณ์จากบทสนทนา (ความเครียด, วิตกกังวล, อาการแพนิค หรือสัญญาณซึมเศร้า)
-3. คอยรับฟังปัญหาและค่อยๆ แนะนำทางออกเชิงบวกเบื้องต้น
-4. ห้ามวินิจฉัยโรคเด็ดขาด หากพบคำพูดที่สื่อถึงการทำร้ายตัวเอง ให้อ่อนโยนลง แสดงความห่วงใย และแนะนำให้ติดต่อสายด่วนสุขภาพจิต 1323 ทันที
-    `;
 
     try {
         const userMessages = req.body.messages || [];
@@ -33,18 +37,26 @@ export default async function handler(req, res) {
             ...userMessages
         ];
 
-        // เรียกใช้งานโมเดล AI ของนักศึกษา
         const completion = await openai.chat.completions.create({
-            model: 'gemini-3.8-flash', // สามารถเปลี่ยนเป็น gemini-3.8-flash ได้
+            model: 'gemini-3.8-flash',
             messages: messages,
-            temperature: 0.7,
+            temperature: 0.6,
+            response_format: { type: "json_object" }
         });
 
-        const reply = completion.choices[0].message.content;
-        res.status(200).json({ reply: reply });
+        const rawContent = completion.choices[0].message.content;
+        const parsedData = JSON.parse(rawContent);
+
+        return res.status(200).json({
+            reply: parsedData.reply,
+            assessment: parsedData.assessment
+        });
 
     } catch (error) {
         console.error('Error with AI API:', error);
-        res.status(500).json({ error: 'เกิดข้อผิดพลาดในการเชื่อมต่อกับระบบ' });
+        return res.status(500).json({ 
+            reply: 'ขออภัยครับ เหมือนสัญญาณการเชื่อมต่อจะมีปัญหาเล็กน้อย ลองพิมพ์คุยกับเราอีกครั้งนะ',
+            assessment: null 
+        });
     }
 }
