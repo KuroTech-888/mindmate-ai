@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MindMate - พื้นที่ปลอดภัยเพื่อคุณ</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Prompt', sans-serif; background-color: #F4F6F2; }
+        .chat-scroll::-webkit-scrollbar { width: 6px; }
+        .chat-scroll::-webkit-scrollbar-thumb { background-color: #D2DCD0; border-radius: 4px; }
+    </style>
+</head>
+<body class="h-screen flex items-center justify-center p-2 sm:p-4">
+
+    <!-- คอนเทนเนอร์หลัก ดีไซน์โค้งมน นุ่มนวล -->
+    <div class="w-full max-w-2xl h-[92vh] bg-white rounded-[28px] shadow-lg shadow-emerald-900/5 flex flex-col overflow-hidden border border-[#E5EBE3]">
+        
+        <!-- Header โทนสีอบอุ่น เป็นมิตร -->
+        <header class="bg-gradient-to-r from-[#607C6B] to-[#769681] text-white px-6 py-4 flex items-center justify-between shadow-sm">
+            <div class="flex items-center space-x-3.5">
+                <div class="w-11 h-11 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center text-xl shadow-inner">🌱</div>
+                <div>
+                    <h1 class="font-medium text-lg tracking-wide">MindMate</h1>
+                    <p class="text-xs text-emerald-100 flex items-center mt-0.5">
+                        <span class="w-2 h-2 rounded-full bg-[#A3D9A5] inline-block mr-1.5 animate-pulse"></span>
+                        เพื่อนที่พร้อมโอบกอดและรับฟังคุณเสมอ
+                    </p>
+                </div>
+            </div>
+            <a href="tel:1323" class="text-xs bg-rose-500/90 hover:bg-rose-600 text-white px-3.5 py-1.5 rounded-full transition shadow-sm font-medium flex items-center space-x-1">
+                <span>📞 สายด่วน 1323</span>
+            </a>
+        </header>
+
+        <!-- แถบเตือนฉุกเฉิน (ซ่อนไว้จนกว่าจะเจอคีย์เวิร์ดวิกฤต) -->
+        <div id="crisisAlert" class="hidden bg-rose-50 border-b border-rose-100 px-5 py-3 text-xs text-rose-700 flex justify-between items-center animate-fade-in">
+            <span>⚠️ เราเป็นห่วงคุณนะ หากรู้สึกไม่ไหว สามารถโทรปรึกษาสายด่วนสุขภาพจิต 1323 ได้ฟรีตลอด 24 ชม. ครับ</span>
+        </div>
+
+        <!-- พื้นที่แชท -->
+        <main id="chatBox" class="flex-1 p-5 overflow-y-auto space-y-5 chat-scroll bg-[#FAFBF9]">
+            <!-- ข้อความต้อนรับจาก AI -->
+            <div class="flex items-start space-x-3">
+                <div class="w-9 h-9 rounded-full bg-[#607C6B] text-white flex justify-center items-center flex-shrink-0 text-sm shadow-sm">🌱</div>
+                <div class="bg-white text-[#2C3E35] p-4 rounded-2xl rounded-tl-sm shadow-sm border border-[#EAF0E8] max-w-[82%] text-sm leading-relaxed">
+                    สวัสดีครับคนเก่ง วันนี้เป็นยังไงบ้าง? มีเรื่องไหนที่หนักใจ เหนื่อยล้า หรืออยากระบายให้เราฟังไหม? พิมพ์เล่ามาได้เต็มที่เลยนะ เราอยู่ตรงนี้เป็นเพื่อนเสมอ 💛
+                </div>
+            </div>
+        </main>
+
+        <!-- สถานะกำลังพิมพ์ -->
+        <div id="typingIndicator" class="hidden px-6 py-2 text-xs text-emerald-700/70 italic bg-white flex items-center space-x-2">
+            <span class="inline-block animate-bounce">●</span>
+            <span class="inline-block animate-bounce [animation-delay:0.2s]">●</span>
+            <span class="inline-block animate-bounce [animation-delay:0.4s]">●</span>
+            <span class="ml-1">MindMate กำลังเรียบเรียงคำตอบเพื่อคุณ...</span>
+        </div>
+
+        <!-- ส่วนพิมพ์ข้อความ -->
+        <footer class="p-4 bg-white border-t border-[#EFEFEF]">
+            <form id="chatForm" class="flex items-center space-x-2.5">
+                <input 
+                    type="text" 
+                    id="userInput" 
+                    placeholder="พิมพ์ความรู้สึก หรือเรื่องราวในใจของคุณตรงนี้..." 
+                    class="flex-1 px-5 py-3.5 bg-[#F4F6F2] border border-[#E2E8DF] rounded-2xl text-sm text-[#2C3E35] placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#607C6B] focus:bg-white transition"
+                    autocomplete="off"
+                />
+                <button 
+                    type="submit" 
+                    id="sendBtn"
+                    class="bg-[#607C6B] hover:bg-[#4E6757] text-white px-6 py-3.5 rounded-2xl text-sm font-medium transition shadow-sm active:scale-95"
+                >
+                    ส่งข้อความ
+                </button>
+            </form>
+        </footer>
+    </div>
+
+    <script>
+        const chatBox = document.getElementById('chatBox');
+        const chatForm = document.getElementById('chatForm');
+        const userInput = document.getElementById('userInput');
+        const typingIndicator = document.getElementById('typingIndicator');
+        const crisisAlert = document.getElementById('crisisAlert');
+
+        let conversationHistory = [];
+
+        function addMessage(role, text) {
+            const isUser = role === 'user';
+            const wrapper = document.createElement('div');
+            wrapper.className = `flex items-start space-x-3 ${isUser ? 'justify-end' : ''}`;
+
+            const avatar = isUser ? '' : `<div class="w-9 h-9 rounded-full bg-[#607C6B] text-white flex justify-center items-center flex-shrink-0 text-sm shadow-sm">🌱</div>`;
+            const bubbleStyle = isUser 
+                ? 'bg-[#607C6B] text-white rounded-tr-sm shadow-sm' 
+                : 'bg-white text-[#2C3E35] rounded-tl-sm border border-[#EAF0E8] shadow-sm';
+
+            wrapper.innerHTML = `
+                ${avatar}
+                <div class="${bubbleStyle} p-4 rounded-2xl max-w-[82%] text-sm leading-relaxed whitespace-pre-wrap">
+                    ${text}
+                </div>
+            `;
+            chatBox.appendChild(wrapper);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        chatForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const message = userInput.value.trim();
+            if (!message) return;
+
+            const dangerWords = ["อยากตาย", "ฆ่าตัวตาย", "ทำร้ายตัวเอง", "ไม่อยากอยู่แล้ว", "ตายดีกว่า"];
+            if (dangerWords.some(w => message.includes(w))) {
+                crisisAlert.classList.remove('hidden');
+            }
+
+            addMessage('user', message);
+            conversationHistory.push({ role: 'user', content: message });
+            userInput.value = '';
+            
+            typingIndicator.classList.remove('hidden');
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ messages: conversationHistory })
+                });
+
+                if (!response.ok) throw new Error('Network error');
+
+                const data = await response.json();
+                addMessage('assistant', data.reply);
+                conversationHistory.push({ role: 'assistant', content: data.reply });
+
+            } catch (err) {
+                addMessage('assistant', 'ขออภัยครับ เหมือนสัญญาณการเชื่อมต่อจะมีปัญหาเล็กน้อย ลองพิมพ์คุยกับเราอีกครั้งนะ');
+            } finally {
+                typingIndicator.classList.add('hidden');
+            }
+        });
+    </script>
+</body>
+</html>
