@@ -1,0 +1,37 @@
+@import url("https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600&display=swap");
+
+body {
+  font-family: "Prompt", sans-serif;
+}
+
+/* ภาพพื้นหลัง Lo-Fi (เปลี่ยน URL เป็นภาพอนิเมะ Ghibli หรือภาพวิวที่ชอบได้เลย) */
+.custom-bg {
+  background-image: url("https://images.unsplash.com/photo-1536697246787-1f2713253579?q=80&w=1920&auto=format&fit=crop");
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+}
+
+/* เอฟเฟกต์กระจกฝ้า (Glassmorphism) สำหรับกล่องหลัก */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.5) !important;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+/* ส่วนหัวโปร่งแสง */
+.glass-header {
+  background: rgba(14, 165, 233, 0.8) !important;
+  backdrop-filter: blur(8px);
+}
+
+/* พื้นหลังช่องแชท */
+.chat-bg {
+  background: rgba(248, 250, 252, 0.3) !important;
+}
+
+/* ส่วนพิมพ์ข้อความด้านล่างโปร่งแสง */
+.glass-footer {
+  background: rgba(255, 255, 255, 0.6) !important;
+}

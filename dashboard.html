@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MindMate - Admin Dashboard</title>
+    <!-- โหลด Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <!-- โหลด Supabase JS SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+      body {
+        font-family: "Prompt", sans-serif;
+        background-color: #f8fafc;
+      }
+    </style>
+  </head>
+  <body class="p-4 md:p-8">
+    <!-- หน้าจอ Login Screen -->
+    <div
+      id="loginScreen"
+      class="fixed inset-0 bg-slate-900 flex justify-center items-center z-50 p-4"
+    >
+      <div
+        class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm text-center"
+      >
+        <h2 class="text-2xl font-bold text-sky-600 mb-2">MindMate Admin</h2>
+        <p class="text-slate-500 mb-6 text-sm">
+          กรุณาใส่รหัสผ่านเพื่อเข้าดูข้อมูลผู้ใช้งาน
+        </p>
+        <input
+          type="password"
+          id="adminPassword"
+          class="w-full border border-slate-300 rounded-xl px-4 py-3 mb-4 focus:outline-none focus:ring-2 focus:ring-sky-500 text-center"
+          placeholder="รหัสผ่านแอดมิน"
+        />
+        <button
+          onclick="checkLogin()"
+          class="w-full bg-sky-500 hover:bg-sky-600 text-white font-semibold py-3 rounded-xl transition-colors shadow-md"
+        >
+          เข้าสู่ระบบ
+        </button>
+      </div>
+    </div>
+
+    <!-- หน้า Dashboard (ซ่อนไว้จนกว่าจะล็อคอินผ่าน) -->
+    <div id="dashboardContent" class="hidden max-w-6xl mx-auto">
+      <div
+        class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4"
+      >
+        <h1
+          class="text-2xl md:text-3xl font-bold text-slate-800 flex items-center gap-3"
+        >
+          📊 แดชบอร์ดสรุปภาวะอารมณ์ผู้ใช้งาน
+        </h1>
+        <button
+          onclick="logout()"
+          class="bg-slate-200 text-slate-700 px-4 py-2 rounded-lg hover:bg-slate-300 transition-colors font-medium text-sm"
+        >
+          ออกจากระบบ
+        </button>
+      </div>
+
+      <!-- กล่องสรุปสถิติ -->
+      <div
+        class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6"
+        id="statsContainer"
+      >
+        <!-- ข้อมูลสถิติจะถูกใส่ผ่าน JavaScript -->
+      </div>
+
+      <!-- ตารางข้อมูลผู้ป่วย -->
+      <div
+        class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-x-auto"
+      >
+        <table class="w-full text-left border-collapse min-w-[700px]">
+          <thead>
+            <tr class="bg-slate-50 text-slate-600 border-b">
+              <th class="p-4 font-medium">รหัสผู้ใช้งาน (Session)</th>
+              <th class="p-4 font-medium">ภาวะอารมณ์หลัก</th>
+              <th class="p-4 font-medium">ระดับความรุนแรง</th>
+              <th class="p-4 font-medium">แจ้งเตือนฉุกเฉิน</th>
+              <th class="p-4 font-medium text-center">ประวัติสนทนา</th>
+            </tr>
+          </thead>
+          <tbody id="userTableBody">
+            <tr>
+              <td colspan="5" class="p-8 text-center text-slate-400">
+                กำลังโหลดข้อมูล...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Modal Popup สำหรับดูประวัติแชท -->
+    <div
+      id="chatModal"
+      class="fixed inset-0 bg-slate-900/40 hidden justify-center items-center z-50 p-4 backdrop-blur-sm"
+    >
+      <div
+        class="bg-white w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col h-[80vh]"
+      >
+        <div
+          class="p-4 border-b flex justify-between items-center bg-sky-50 rounded-t-2xl"
+        >
+          <h3 class="font-bold text-slate-800">
+            ประวัติแชท:
+            <span id="modalSessionId" class="text-sky-600 font-normal"></span>
+          </h3>
+          <button
+            onclick="closeModal()"
+            class="text-slate-400 hover:text-red-500 text-2xl leading-none"
+          >
+            &times;
+          </button>
+        </div>
+        <div
+          id="modalChatHistory"
+          class="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50"
+        >
+          <!-- ข้อความแชทจะถูกใส่ตรงนี้ -->
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // 1. นำข้อมูล Supabase ของคุณมาใส่ตรงนี้
+      const SUPABASE_URL = "https://tsiljjvhzwycazttprem.supabase.co";
+      const SUPABASE_ANON_KEY =
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRzaWxqanZoend5Y2F6dHRwcmVtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkzOTU1MTAsImV4cCI6MjEwNDk3MTUxMH0.qiisQD33d_q9GAWc53CWhRfDkRgvt07DSp5IikwuESA"; // <<< ลบข้อความนี้แล้วเอา anon public key มาใส่
+
+      const supabase = window.supabase.createClient(
+        SUPABASE_URL,
+        SUPABASE_ANON_KEY,
+      );
+      let allData = [];
+
+      // 2. ฟังก์ชันตรวจสอบรหัสผ่าน (ใช้รหัสผ่านชั่วคราวสำหรับส่งโครงงาน)
+      function checkLogin() {
+        const pass = document.getElementById("adminPassword").value;
+        // รหัสผ่านคือ admin123 (เปลี่ยนได้ตามต้องการ)
+        if (pass === "admin74110") {
+          document.getElementById("loginScreen").classList.add("hidden");
+          document
+            .getElementById("dashboardContent")
+            .classList.remove("hidden");
+          fetchData();
+        } else {
+          alert("รหัสผ่านไม่ถูกต้อง!");
+        }
+      }
+
+      function logout() {
+        document.getElementById("loginScreen").classList.remove("hidden");
+        document.getElementById("dashboardContent").classList.add("hidden");
+        document.getElementById("adminPassword").value = "";
+      }
+
+      // 3. ดึงข้อมูลจากฐานข้อมูล chat_history
+      async function fetchData() {
+        const { data, error } = await supabase
+          .from("chat_history")
+          .select("*")
+          .order("created_at", { ascending: true });
+
+        if (error) {
+          console.error("Database Error:", error);
+          alert("ไม่สามารถดึงข้อมูลจากฐานข้อมูลได้");
+          return;
+        }
+        allData = data;
+        processAndDisplayData(data);
+      }
+
+      // 4. ประมวลผลและจัดกลุ่มผู้ป่วยตาม Session ID
+      function processAndDisplayData(data) {
+        const sessions = {};
+
+        data.forEach((row) => {
+          if (!sessions[row.session_id]) {
+            sessions[row.session_id] = {
+              history: [],
+              latestSeverity: "Normal",
+              latestCondition: "Normal",
+              needsEmergency: false,
+            };
+          }
+          sessions[row.session_id].history.push(row);
+
+          // ยึดผลการประเมินล่าสุดที่ AI ตอบกลับ
+          if (row.sender_role === "assistant") {
+            if (row.severity && row.severity !== "Normal")
+              sessions[row.session_id].latestSeverity = row.severity;
+            if (row.primary_condition && row.primary_condition !== "Normal")
+              sessions[row.session_id].latestCondition = row.primary_condition;
+            if (row.requires_emergency)
+              sessions[row.session_id].needsEmergency = true;
+          }
+        });
+
+        const tbody = document.getElementById("userTableBody");
+        tbody.innerHTML = "";
+
+        let emergencyCount = 0;
+        const totalSessions = Object.keys(sessions).length;
+
+        for (const [sessionId, info] of Object.entries(sessions)) {
+          if (info.needsEmergency || info.latestSeverity === "Severe")
+            emergencyCount++;
+
+          // กำหนดสีป้ายกำกับตามระดับความรุนแรง
+          let severityBadge =
+            '<span class="px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">ปกติ (Normal)</span>';
+          if (info.latestSeverity === "Mild")
+            severityBadge =
+              '<span class="px-3 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700">เล็กน้อย (Mild)</span>';
+          if (info.latestSeverity === "Moderate")
+            severityBadge =
+              '<span class="px-3 py-1 rounded-full text-xs font-semibold bg-orange-100 text-orange-700">ปานกลาง (Moderate)</span>';
+          if (info.latestSeverity === "Severe")
+            severityBadge =
+              '<span class="px-3 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-700">รุนแรง (Severe)</span>';
+
+          const tr = document.createElement("tr");
+          tr.className = "border-b hover:bg-slate-50 transition-colors";
+          tr.innerHTML = `
+                    <td class="p-4 font-medium text-slate-600 text-sm">${sessionId}</td>
+                    <td class="p-4 text-sm text-slate-700">${info.latestCondition}</td>
+                    <td class="p-4">${severityBadge}</td>
+                    <td class="p-4">
+                        ${info.needsEmergency ? '<div class="flex items-center gap-1 text-red-500 text-sm font-bold"><span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span> เคสวิกฤต</div>' : '<span class="text-slate-400 text-sm">-</span>'}
+                    </td>
+                    <td class="p-4 text-center">
+                        <button onclick="viewChat('${sessionId}')" class="bg-sky-50 text-sky-600 border border-sky-200 hover:bg-sky-500 hover:text-white px-4 py-1.5 rounded-lg text-sm font-medium transition-all">อ่านแชท</button>
+                    </td>
+                `;
+          tbody.appendChild(tr);
+        }
+
+        // อัปเดตกล่องสถิติ
+        document.getElementById("statsContainer").innerHTML = `
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-center">
+                    <p class="text-slate-500 text-sm font-medium mb-1">จำนวนผู้ใช้งานทั้งหมด</p>
+                    <h3 class="text-4xl font-bold text-sky-600">${totalSessions} <span class="text-lg font-normal text-slate-400">คน</span></h3>
+                </div>
+                <div class="bg-white p-6 rounded-2xl shadow-sm border ${emergencyCount > 0 ? "border-red-200 bg-red-50/30" : "border-slate-200"} flex flex-col justify-center">
+                    <p class="${emergencyCount > 0 ? "text-red-500" : "text-slate-500"} text-sm font-medium mb-1">เคสฉุกเฉินที่ต้องเฝ้าระวัง (Severe/Emergency)</p>
+                    <h3 class="text-4xl font-bold ${emergencyCount > 0 ? "text-red-600" : "text-slate-400"}">${emergencyCount} <span class="text-lg font-normal">เคส</span></h3>
+                </div>
+            `;
+      }
+
+      // 5. ระบบดูแชทในหน้าต่าง Modal
+      function viewChat(sessionId) {
+        document.getElementById("modalSessionId").innerText = sessionId;
+        const modalContent = document.getElementById("modalChatHistory");
+        modalContent.innerHTML = "";
+
+        const sessionData = allData.filter(
+          (row) => row.session_id === sessionId,
+        );
+
+        sessionData.forEach((msg) => {
+          const div = document.createElement("div");
+          if (msg.sender_role === "user") {
+            div.className = "flex gap-3 justify-end";
+            div.innerHTML = `<div class="bg-teal-500 text-white rounded-2xl rounded-tr-none px-4 py-2 max-w-[80%] text-sm shadow-sm">${msg.message_content}</div>`;
+          } else {
+            div.className = "flex gap-3";
+            div.innerHTML = `
+                        <div class="w-8 h-8 rounded-full bg-sky-500 flex items-center justify-center text-white text-sm shrink-0 shadow-sm">🌱</div>
+                        <div class="bg-white border border-slate-200 text-gray-700 rounded-2xl rounded-tl-none px-4 py-2 max-w-[80%] text-sm shadow-sm">${msg.message_content}</div>
+                    `;
+          }
+          modalContent.appendChild(div);
+        });
+
+        const modal = document.getElementById("chatModal");
+        modal.classList.remove("hidden");
+        modal.classList.add("flex");
+
+        // เลื่อนลงไปล่างสุดของแชทอัตโนมัติ
+        setTimeout(() => {
+          modalContent.scrollTop = modalContent.scrollHeight;
+        }, 50);
+      }
+
+      function closeModal() {
+        const modal = document.getElementById("chatModal");
+        modal.classList.add("hidden");
+        modal.classList.remove("flex");
+      }
+    </script>
+  </body>
+</html>
