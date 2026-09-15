@@ -1,12 +1,14 @@
 import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
 
+// 1. ตั้งค่าการเชื่อมต่อ AI API (KKU ICCS)
 const openai = new OpenAI({
   apiKey: process.env.ICCS_API_KEY,
+  // ใช้ URL ตามตัวอย่างโค้ด Python ของทางมหาวิทยาลัย
   baseURL: "https://gen.ai.kku.ac.th/iccsacth/api/v1",
 });
 
-// ตรวจสอบความพร้อมของค่า Supabase ก่อนเรียกใช้งาน
+// 2. ตั้งค่าการเชื่อมต่อ Supabase
 const hasSupabaseConfig =
   process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY;
 const supabase = hasSupabaseConfig
@@ -17,7 +19,7 @@ const SYSTEM_PROMPT = `
 คุณคือ 'MindMate' เพื่อนรับฟังและประเมินภาวะสุขภาพจิตเบื้องต้น
 หน้าที่ของคุณ:
 1. ให้คำปรึกษาด้วยน้ำเสียงอบอุ่น เข้าอกเข้าใจ ไม่ตัดสิน ไม่สั่งสอน
-2. หากพบสัญญาณอาการแพนิค (ใจสั่น แน่นหน้าอก หายใจไม่อิ่ม รู้สึกจะตาย): ใช้ประโยคสั้น ยืนยันว่าปลอดภัย และพาหายใจช้าๆ ทันที
+2. หากพบสัญญาณอาการแพนิค (ใจสั่น แน่นหน้าอก หายใจไม่อิ่ม) หรือภาวะอยากทำร้ายตนเอง: ใช้ประโยคสั้น ยืนยันว่าปลอดภัย และแนะนำช่องทางช่วยเหลือทันที
 3. สังเกตและประเมินภาวะอารมณ์ส่งกลับมาในรูปแบบ JSON ตามโครงสร้างนี้เสมอ:
 {
   "reply": "ข้อความตอบกลับผู้ใช้",
@@ -32,8 +34,9 @@ const SYSTEM_PROMPT = `
 `;
 
 export default async function handler(req, res) {
-  if (req.method !== "POST")
+  if (req.method !== "POST") {
     return res.status(405).json({ error: "Method Not Allowed" });
+  }
 
   try {
     const { messages, sessionId, userMessage } = req.body;
@@ -42,9 +45,9 @@ export default async function handler(req, res) {
       ...(messages || []),
     ];
 
-    // 1. เรียกใช้งาน AI ให้ตอบกลับก่อนเป็นลำดับแรก
+    // 1. เรียกใช้งาน AI เปลี่ยนเป็น Claude Sonnet 4.6
     const completion = await openai.chat.completions.create({
-      model: "gemini-3.8-flash",
+      model: "claude-sonnet-4.6",
       messages: apiMessages,
       temperature: 0.5,
     });
@@ -56,6 +59,7 @@ export default async function handler(req, res) {
       reply: rawContent.replace(/```json|```/g, "").trim(),
       assessment: null,
     };
+
     if (jsonMatch) {
       try {
         parsedData = JSON.parse(jsonMatch[0]);
@@ -64,7 +68,7 @@ export default async function handler(req, res) {
       }
     }
 
-    // 2. แยกการบันทึก Supabase ออกมาต่างหากเพื่อไม่ให้กระทบการตอบแชท
+    // 2. บันทึกข้อมูลลง Supabase
     if (supabase) {
       try {
         await supabase.from("chat_history").insert([
@@ -87,17 +91,15 @@ export default async function handler(req, res) {
       } catch (dbError) {
         console.error("Supabase Save Error (Bypassed):", dbError);
       }
-    } else {
-      console.warn("Supabase credentials missing in Environment Variables");
     }
 
-    // 3. ส่งคำตอบกลับหาหน้าเว็บเสมอ
+    // 3. ส่งผลลัพธ์กลับไปยังหน้าเว็บ
     return res.status(200).json(parsedData);
   } catch (error) {
     console.error("Core AI Error:", error);
+    // แสดงข้อความ Error ดักจับให้เห็นหน้าเว็บ
     return res.status(500).json({
-      reply:
-        "ขออภัยครับ เหมือนสัญญาณการเชื่อมต่อจะมีปัญหาเล็กน้อย ลองพิมพ์คุยกับเราอีกครั้งนะ",
+      reply: `[System Error Debug]: ${error.message}`,
       assessment: null,
     });
   }
