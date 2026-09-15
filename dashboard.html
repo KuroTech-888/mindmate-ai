@@ -130,31 +130,57 @@
     </div>
 
     <script>
-      // 1. นำข้อมูล Supabase ของคุณมาใส่ตรงนี้
+      // 1. ตั้งค่า API Key
       const SUPABASE_URL = "https://tsiljjvhzwycazttprem.supabase.co";
       const SUPABASE_ANON_KEY =
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRzaWxqanZoend5Y2F6dHRwcmVtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkzOTU1MTAsImV4cCI6MjEwNDk3MTUxMH0.qiisQD33d_q9GAWc53CWhRfDkRgvt07DSp5IikwuESA"; // <<< ลบข้อความนี้แล้วเอา anon public key มาใส่
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRzaWxqanZoend5Y2F6dHRwcmVtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkzOTU1MTAsImV4cCI6MjEwNDk3MTUxMH0.qiisQD33d_q9GAWc53CWhRfDkRgvt07DSp5IikwuESA";
 
-      const supabase = window.supabase.createClient(
-        SUPABASE_URL,
-        SUPABASE_ANON_KEY,
-      );
+      let supabaseClient;
       let allData = [];
 
-      // 2. ฟังก์ชันตรวจสอบรหัสผ่าน (ใช้รหัสผ่านชั่วคราวสำหรับส่งโครงงาน)
+      // 2. ฟังก์ชันตรวจสอบรหัสผ่าน (เพิ่มระบบดักจับ Error)
       function checkLogin() {
-        const pass = document.getElementById("adminPassword").value;
-        // รหัสผ่านคือ admin123 (เปลี่ยนได้ตามต้องการ)
-        if (pass === "admin74110") {
-          document.getElementById("loginScreen").classList.add("hidden");
-          document
-            .getElementById("dashboardContent")
-            .classList.remove("hidden");
-          fetchData();
-        } else {
-          alert("รหัสผ่านไม่ถูกต้อง!");
+        try {
+          const pass = document.getElementById("adminPassword").value;
+
+          if (pass === "admin74110") {
+            // เช็คว่าโหลด Supabase ผ่าน CDN สำเร็จไหม
+            if (!window.supabase) {
+              alert(
+                "❌ ข้อผิดพลาด: ระบบฐานข้อมูลโหลดไม่สำเร็จ!\nอาจถูกบล็อกโดย Adblocker หรือเน็ตเวิร์คของโรงเรียน/มหาวิทยาลัย ลองปิด Adblock หรือเปลี่ยนเน็ตดูครับ",
+              );
+              return;
+            }
+
+            // เริ่มสร้างการเชื่อมต่อหลังจากเช็ครหัสผ่านผ่านแล้ว
+            if (!supabaseClient) {
+              supabaseClient = window.supabase.createClient(
+                SUPABASE_URL,
+                SUPABASE_ANON_KEY,
+              );
+            }
+
+            document.getElementById("loginScreen").classList.add("hidden");
+            document
+              .getElementById("dashboardContent")
+              .classList.remove("hidden");
+            fetchData();
+          } else {
+            alert("รหัสผ่านไม่ถูกต้อง!");
+          }
+        } catch (error) {
+          alert("⚠️ เกิดข้อผิดพลาดของระบบ (System Error): " + error.message);
         }
       }
+
+      // รองรับการกดปุ่ม Enter เพื่อล็อคอิน
+      document
+        .getElementById("adminPassword")
+        .addEventListener("keypress", function (e) {
+          if (e.key === "Enter") {
+            checkLogin();
+          }
+        });
 
       function logout() {
         document.getElementById("loginScreen").classList.remove("hidden");
@@ -162,23 +188,30 @@
         document.getElementById("adminPassword").value = "";
       }
 
-      // 3. ดึงข้อมูลจากฐานข้อมูล chat_history
+      // 3. ดึงข้อมูลจากฐานข้อมูล
       async function fetchData() {
-        const { data, error } = await supabase
-          .from("chat_history")
-          .select("*")
-          .order("created_at", { ascending: true });
+        try {
+          const { data, error } = await supabaseClient
+            .from("chat_history")
+            .select("*")
+            .order("created_at", { ascending: true });
 
-        if (error) {
-          console.error("Database Error:", error);
-          alert("ไม่สามารถดึงข้อมูลจากฐานข้อมูลได้");
-          return;
+          if (error) {
+            console.error("Database Error:", error);
+            alert(
+              "เชื่อมต่อฐานข้อมูลได้ แต่ไม่สามารถดึงข้อมูลได้: " +
+                error.message,
+            );
+            return;
+          }
+          allData = data || [];
+          processAndDisplayData(allData);
+        } catch (err) {
+          alert("⚠️ ดึงข้อมูลล้มเหลว: " + err.message);
         }
-        allData = data;
-        processAndDisplayData(data);
       }
 
-      // 4. ประมวลผลและจัดกลุ่มผู้ป่วยตาม Session ID
+      // 4. ประมวลผลและจัดกลุ่มข้อมูล
       function processAndDisplayData(data) {
         const sessions = {};
 
@@ -193,7 +226,6 @@
           }
           sessions[row.session_id].history.push(row);
 
-          // ยึดผลการประเมินล่าสุดที่ AI ตอบกลับ
           if (row.sender_role === "assistant") {
             if (row.severity && row.severity !== "Normal")
               sessions[row.session_id].latestSeverity = row.severity;
@@ -214,7 +246,6 @@
           if (info.needsEmergency || info.latestSeverity === "Severe")
             emergencyCount++;
 
-          // กำหนดสีป้ายกำกับตามระดับความรุนแรง
           let severityBadge =
             '<span class="px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">ปกติ (Normal)</span>';
           if (info.latestSeverity === "Mild")
@@ -243,7 +274,6 @@
           tbody.appendChild(tr);
         }
 
-        // อัปเดตกล่องสถิติ
         document.getElementById("statsContainer").innerHTML = `
                 <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-center">
                     <p class="text-slate-500 text-sm font-medium mb-1">จำนวนผู้ใช้งานทั้งหมด</p>
@@ -285,7 +315,6 @@
         modal.classList.remove("hidden");
         modal.classList.add("flex");
 
-        // เลื่อนลงไปล่างสุดของแชทอัตโนมัติ
         setTimeout(() => {
           modalContent.scrollTop = modalContent.scrollHeight;
         }, 50);
